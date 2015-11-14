@@ -1,5 +1,6 @@
 from time import *
 from machine import I2C
+from machine import Pin
 
 # from i2c-dev.h
 I2C_SLAVE = 0x0703
@@ -60,7 +61,7 @@ row_offsetsLarge = [0x00, 0x40, 0x10, 0x50]
 # General i2c device class so that other devices can be added easily
 class i2c_lcd:
             
-    def __init__(self, addr, port,En_pin,Rw_pin,Rs_pin,D4_pin,D5_pin,D6_pin,D7_pin):
+    def __init__(self, addr, En_pin,Rw_pin,Rs_pin,D4_pin,D5_pin,D6_pin,D7_pin,debug):
         self.i2c                       = I2C(0, I2C.MASTER, baudrate=100000, pins=('GP15', 'GP10'))
         self.addr                      = addr
         self._data_pins                = [0]*4;
@@ -74,11 +75,11 @@ class i2c_lcd:
         self._backlightPinMask         = 0;
         self._backlightStsMask         = LCD_NOBACKLIGHT;
         self._polarity                 = POSITIVE;
-        self.debugFlag                 = False
+        self.debugFlag                 = debug
         
     def writeByte(self, byte):
         self.debug("WRITE %x" % byte) 
-        self.dev[self.addr]= byte
+        self.i2c.writeto(self.addr, byte)
 
     def write(self, byte,mode):
         self.debug( "WRITEMODE %x %x" % (byte,mode))
@@ -108,9 +109,9 @@ class i2c_lcd:
         
     def pulseEnable(self,data):
         #print "pulseEnable %x" % (data | self._En)
-        self.dev[-1]= (data | self._En);
+        self.i2c.writeto(self.addr, (data | self._En))
         #print "pulseEnable %x" % (data & ~self._En)
-        self.dev[-1] = (data & ~self._En);
+        self.i2c.writeto(self.addr, (data & ~self._En))
 
     def read_nbytes_data(self, data, n): # For sequential reads > 1 byte
         return self.i2c.read_i2c_block_data(self.addr, data, n)
@@ -136,25 +137,27 @@ class i2c_lcd:
             print (msg)
 class lcd:
     #initialises objects and lcd
-    def __init__(self, addr=0x27,En_pin=2,Rw_pin=1,Rs_pin=0,D4_pin=4,D5_pin=5,D6_pin=6,D7_pin=7):
+    def __init__(self, addr=0x27,En_pin=2,Rw_pin=1,Rs_pin=0,D4_pin=4,D5_pin=5,D6_pin=6,D7_pin=7,debugLCD=False,debugI2C=False):
         
-        self.addr              = addr;
-        self.port              = port;
-        self.En_pin            = En_pin;
-        self.Rw_pin            = Rw_pin;
-        self.Rs_pin            = Rs_pin;
-        self.D4_pin            = D4_pin;
-        self.D5_pin            = D5_pin;
-        self.D6_pin            = D6_pin;
-        self.D7_pin            = D7_pin;
+        self.addr              = addr
+        self.En_pin            = En_pin
+        self.Rw_pin            = Rw_pin
+        self.Rs_pin            = Rs_pin
+        self.D4_pin            = D4_pin
+        self.D5_pin            = D5_pin
+        self.D6_pin            = D6_pin
+        self.D7_pin            = D7_pin
         
-        self._displayfunction  = LCD_4BITMODE | LCD_1LINE | LCD_5x8DOTS;
-        self._numlines         = 2;
-        self._cols             = 20;
+        self._displayfunction  = LCD_4BITMODE | LCD_1LINE | LCD_5x8DOTS
+        self._numlines         = 2
+        self._cols             = 20
+        self.debugFlag         = debugLCD
+        self.debugI2C          = debugI2C
         
     def init(self,cols,lines,dotsize):
-        self.lcd_device = i2c_lcd(self.addr, self.port,self.En_pin,self.Rw_pin,
-            self.Rs_pin,self.D4_pin,self.D5_pin,self.D6_pin,self.D7_pin)
+        self.lcd_device = i2c_lcd(self.addr,self.En_pin,self.Rw_pin,self.Rs_pin,
+                                    self.D4_pin,self.D5_pin,self.D6_pin,self.D7_pin,
+                                    self.debugI2C)
         if (lines > 1): 
             self._displayfunction |= LCD_2LINE;
 
@@ -194,44 +197,58 @@ class lcd:
         self.lcd_device.write(value,COMMAND);
         
     def display(self):
+        self.debug('display')
         self._displaycontrol |= LCD_DISPLAYON;
         self.command(LCD_DISPLAYCONTROL | self._displaycontrol);
 
     def home(self):
+        self.debug('home')
         self.command(LCD_RETURNHOME);
         sleep_ms(2)
         
     def clear(self):
+        self.debug('clear')
         self.command(LCD_CLEARDISPLAY); 
         sleep_ms(2) 
 
     def backlight(self):
+        self.debug('backlight')
         self.setBacklight(LCD_BACKLIGHT)
         
     def setBacklightPin(self,pin,pol):
+        self.debug('backlightPin(%d,%d)'%(pin,pol))
         self.lcd_device.setBacklightPin(pin,pol)
         
     def setBacklight(self,value):
+        self.debug('setBacklight(%d)'%value)
         self.lcd_device.setBacklight(value);
 
     def begin(self,cols,rows):
+        self.debug('begin(%d,%d)'%(rows,cols))
         self.init(cols,rows,LCD_5x8DOTS);
         
     def write(self,value):
+        self.debug('write(%s)'%value)
         for c in value:
             self.lcd_device.write(ord(c),DATA)
             
     def noDisplay(self):
+        self.debug('noDisplay')
+    
         self._displaycontrol &= ~LCD_DISPLAYON
         self.command(LCD_DISPLAYCONTROL | self._displaycontrol);
         
         
     def display(self):
+        self.debug('display')
+    
         self._displaycontrol |= LCD_DISPLAYON
         self.command(LCD_DISPLAYCONTROL | self._displaycontrol);
         
                     
     def setCursor(self,col,row):
+        self.debug('setCursor(%d,%d)'%(col,row))
+    
         if(row >= self._numlines):
             row = self._numlines - 1;
             
@@ -243,9 +260,13 @@ class lcd:
 
         self.command(commandValue)
 
+    def debug(self,msg):
+        if (self.debugFlag):
+            print (msg)
+
     def test(self):
         self.begin(16,2)
-        self.setbacklightPin(3)
+        self.setBacklightPin(3,POSITIVE)
         self.setBacklight(1)
         self.home()
-        self.write("Hello World!\n")
+        self.write("Hello World!")
