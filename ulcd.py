@@ -237,14 +237,6 @@ class lcd:
     
         self._displaycontrol &= ~LCD_DISPLAYON
         self.command(LCD_DISPLAYCONTROL | self._displaycontrol);
-        
-        
-    def display(self):
-        self.debug('display')
-    
-        self._displaycontrol |= LCD_DISPLAYON
-        self.command(LCD_DISPLAYCONTROL | self._displaycontrol);
-        
                     
     def setCursor(self,col,row):
         self.debug('setCursor(%d,%d)'%(col,row))
@@ -255,7 +247,7 @@ class lcd:
         if (self._cols == 16 and self._numlines == 4):
             commandValue = LCD_SETDDRAMADDR | (col + row_offsetsLarge[row]);
         else:
-            print ("offset value=%x"%row_offsetsDef[row])
+            self.debug("offset value=%x"%row_offsetsDef[row])
             commandValue = LCD_SETDDRAMADDR | (col + row_offsetsDef[row]);
 
         self.command(commandValue)
@@ -270,3 +262,16 @@ class lcd:
         self.setBacklight(1)
         self.home()
         self.write("Hello World!")
+        self.setCursor(0,1)
+        self.write("2nd line")
+        sleep(1)
+        self.clear()
+        self.home()
+        start=ticks_ms()
+        for x in range(0,1000):
+            self.setCursor(0,0)
+            self.write("%d"%x)
+        end=ticks_ms()
+        self.setCursor(0,1)
+        self.write("Took %d ms"%ticks_diff(start,end))
+        
